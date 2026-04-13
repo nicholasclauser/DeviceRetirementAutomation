@@ -1,0 +1,10 @@
+out/
+ToBeRetired/
+.env
+.secrets.env
+*.cer
+*.pfx
+*.key
+whitelist.txt
+.vscode/
+journal.txt
