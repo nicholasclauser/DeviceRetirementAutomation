@@ -30,13 +30,15 @@ function Get-DotEnv {
 function Test-Whitelist {
     param([string]$Hostname, [string]$SerialNumber, [string[]]$ExtraPatterns = @())
 
-    # skip distribution points and site server
-    # add site-specific hostnames to EXTRA_SKIP_PATTERNS in .env
-    if ($Hostname -match 'PC')    { return $true }
-
+    # Protect infrastructure (distribution points, site servers, domain controllers)
+    # from retirement. There is no hardcoded rule on purpose: define your real infra
+    # names or wildcard patterns in EXTRA_SKIP_PATTERNS in .env, e.g. "DP01,SCCM-*,DC-*".
+    # Matching is wildcard and full-string (-like), NOT a loose substring, so a short
+    # pattern can't silently skip every machine that merely contains those letters.
     foreach ($pat in $ExtraPatterns) {
-        if ($pat -and $Hostname     -match [regex]::Escape($pat)) { return $true }
-        if ($pat -and $SerialNumber -match [regex]::Escape($pat)) { return $true }
+        if (-not $pat) { continue }
+        if ($Hostname     -and $Hostname     -like $pat) { return $true }
+        if ($SerialNumber -and $SerialNumber -like $pat) { return $true }
     }
     return $false
 }

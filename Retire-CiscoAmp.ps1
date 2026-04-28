@@ -10,6 +10,7 @@ param(
     [string]$EnvPath,
     [string]$OutputDir,
     [bool]$PreviewOnly = $true,
+    [switch]$ConfirmDelete,
     [switch]$TestAuthOnly
 )
 
@@ -141,7 +142,11 @@ foreach ($row in $rows) {
             $guid = $dev.connector_guid
             Write-Host "  Found (guid=$guid)" -ForegroundColor Green
 
-            if (-not $PreviewOnly) {
+            if (-not $PreviewOnly -and -not $ConfirmDelete) {
+                Write-Host "  SKIPPED (Cisco delete is irreversible; pass -ConfirmDelete)" -ForegroundColor Yellow
+                Write-RetirementLog -Hostname $hn -SerialNumber $sn -System 'CiscoAmp' -Action 'Delete' -Status 'Skipped' -Detail "Needs -ConfirmDelete | GUID=$guid"
+                $stats.Found++
+            } elseif (-not $PreviewOnly) {
                 $ok = Invoke-AmpApi -Method DELETE -Path "/v1/computers/$guid"
                 if ($ok) {
                     Write-Host "  Deleted" -ForegroundColor Green

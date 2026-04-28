@@ -97,7 +97,7 @@ foreach ($row in $rows) {
     }
 
     try {
-        $computer = Get-ADComputer -Filter "Name -eq '$hn'" `
+        $computer = Get-ADComputer -Filter { Name -eq $hn } `
             -Properties DistinguishedName, Enabled, LastLogonDate, OperatingSystem -ErrorAction SilentlyContinue
 
         if ($computer) {

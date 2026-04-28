@@ -13,6 +13,9 @@ param(
     [string]$OutputDir,
     [bool]$PreviewOnly = $true,
     [string[]]$Systems = @('Absolute','CiscoAmp','SCCM','AD'),
+    [int]$MaxBatch = 500,
+    [switch]$ConfirmCiscoDelete,
+    [switch]$Force,
     [switch]$TestAuthOnly
 )
 
@@ -58,6 +61,26 @@ if (-not $CsvPath)                          { Write-Error "CsvPath is required."
 if (-not (Test-Path -LiteralPath $CsvPath)) { Write-Error "CSV not found: $CsvPath" }
 if (@(Import-Csv -LiteralPath $CsvPath).Count -eq 0) { Write-Error "CSV is empty." }
 
+# --- action-mode brakes ---
+if (-not $PreviewOnly) {
+    $deviceCount = @(Import-Csv -LiteralPath $CsvPath).Count
+
+    if ($deviceCount -gt $MaxBatch) {
+        Write-Error "Refusing to action $deviceCount devices; exceeds -MaxBatch cap of $MaxBatch. Raise -MaxBatch only if this batch size is intended."
+    }
+
+    if (('CiscoAmp' -in $Systems) -and -not $ConfirmCiscoDelete) {
+        Write-Error "CiscoAmp deletes the console record permanently and cannot be undone. Re-run with -ConfirmCiscoDelete to include it in action mode, or drop CiscoAmp from -Systems."
+    }
+
+    if (-not $Force) {
+        Write-Host ""
+        Write-Host "ACTION MODE: this will modify $deviceCount device(s) across $($Systems -join ', ')." -ForegroundColor Yellow
+        $confirm = Read-Host "Type the device count ($deviceCount) to proceed, anything else aborts"
+        if ($confirm -ne "$deviceCount") { Write-Error "Aborted (confirmation did not match)." }
+    }
+}
+
 # --- run ---
 $runDir = Join-Path $OutputDir (Get-Date -Format 'yyyyMMdd-HHmmss')
 New-Item -ItemType Directory -LiteralPath $runDir | Out-Null
@@ -73,7 +96,9 @@ $results = @{}
 foreach ($s in $Systems) {
     Write-Host "--- $s ---" -ForegroundColor Cyan
     try {
-        & $scripts[$s] -CsvPath $CsvPath -EnvPath $EnvPath -OutputDir $runDir -PreviewOnly $PreviewOnly
+        $extra = @{}
+        if ($s -eq 'CiscoAmp' -and $ConfirmCiscoDelete) { $extra['ConfirmDelete'] = $true }
+        & $scripts[$s] -CsvPath $CsvPath -EnvPath $EnvPath -OutputDir $runDir -PreviewOnly $PreviewOnly @extra
         $results[$s] = 'OK'
     }
     catch {
