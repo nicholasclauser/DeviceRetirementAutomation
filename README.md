@@ -133,10 +133,12 @@ Valid values: `Absolute`, `CiscoAmp`, `SCCM`, `AD`
 
 ## Whitelist
 
-Any device whose hostname matches `PC` is automatically skipped (distribution
-points and site servers). Additional patterns can be added via `EXTRA_SKIP_PATTERNS`
-in `.env` as a comma-separated list. Whitelisted devices are logged but never
-actioned.
+Infrastructure you never want retired (distribution points, site servers, domain
+controllers) is protected by an allow-list you define, not a hardcoded rule. Put real
+names or wildcard patterns in `EXTRA_SKIP_PATTERNS` in `.env` as a comma-separated list,
+for example `DP01,SCCM-*,DC-*`. Matching is wildcard and full-string (`-like`), so a
+short pattern won't silently skip every machine that merely contains those letters.
+Whitelisted devices are logged but never actioned.
 
 ---
 
