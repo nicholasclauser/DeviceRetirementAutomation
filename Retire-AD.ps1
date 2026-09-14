@@ -19,7 +19,10 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptDir '_shared.ps1')
 
-if (-not $EnvPath) { $EnvPath = Join-Path (Split-Path $scriptDir -Parent) '.env' }
+if (-not $EnvPath) {
+    $EnvPath = Join-Path $scriptDir '.env'
+    if (-not (Test-Path -LiteralPath $EnvPath)) { $EnvPath = Join-Path (Split-Path $scriptDir -Parent) '.env' }
+}
 
 $cfg        = Get-DotEnv -Path $EnvPath
 $disabledOU = if ($cfg['AD_DISABLED_COMPUTERS_OU']) { $cfg['AD_DISABLED_COMPUTERS_OU'] } else { '' }
@@ -64,7 +67,7 @@ $hasHost   = [bool]$s0.PSObject.Properties['Hostname']
 $hasSerial = [bool]$s0.PSObject.Properties['SerialNumber']
 if (-not $hasHost -and -not $hasSerial) { Write-Error "CSV needs Hostname and/or SerialNumber columns." }
 
-if (-not (Test-Path -LiteralPath $OutputDir)) { New-Item -ItemType Directory -LiteralPath $OutputDir | Out-Null }
+if (-not (Test-Path -LiteralPath $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
 $script:logPath = Join-Path $OutputDir "Retirement-AD-$(Get-Date -Format 'yyyyMMdd-HHmmss').csv"
 
 Write-Host "Retire-AD | $(@($rows).Count) devices | PreviewOnly=$PreviewOnly | Log: $script:logPath"
@@ -96,8 +99,15 @@ foreach ($row in $rows) {
         $stats.NotFound++; continue
     }
 
+    # string filter on purpose: a scriptblock filter can't see $hn once the AD module runs through the PS7 compat layer
+    if ($hn -notmatch '^[A-Za-z0-9-]{1,63}$') {
+        Write-Host '  Bad hostname, skipping' -ForegroundColor DarkGray
+        Write-RetirementLog -Hostname $hn -SerialNumber $sn -System 'AD' -Action 'Skip' -Status 'Skipped' -Detail 'Hostname has characters AD names never have'
+        $stats.Errors++; continue
+    }
+
     try {
-        $computer = Get-ADComputer -Filter { Name -eq $hn } `
+        $computer = Get-ADComputer -Filter "Name -eq '$hn'" `
             -Properties DistinguishedName, Enabled, LastLogonDate, OperatingSystem -ErrorAction SilentlyContinue
 
         if ($computer) {

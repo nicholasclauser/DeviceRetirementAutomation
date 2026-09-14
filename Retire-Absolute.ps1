@@ -19,7 +19,10 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptDir '_shared.ps1')
 
-if (-not $EnvPath) { $EnvPath = Join-Path (Split-Path $scriptDir -Parent) '.env' }
+if (-not $EnvPath) {
+    $EnvPath = Join-Path $scriptDir '.env'
+    if (-not (Test-Path -LiteralPath $EnvPath)) { $EnvPath = Join-Path (Split-Path $scriptDir -Parent) '.env' }
+}
 
 # grab credentials from secretstore
 $tokenId     = Get-Secret -Name AbsoluteTokenId     -AsPlainText -ErrorAction Stop
@@ -152,7 +155,7 @@ $hasHost   = [bool]$s0.PSObject.Properties['Hostname']
 $hasSerial = [bool]$s0.PSObject.Properties['SerialNumber']
 if (-not $hasHost -and -not $hasSerial) { Write-Error "CSV needs Hostname and/or SerialNumber columns." }
 
-if (-not (Test-Path -LiteralPath $OutputDir)) { New-Item -ItemType Directory -LiteralPath $OutputDir | Out-Null }
+if (-not (Test-Path -LiteralPath $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
 $script:logPath = Join-Path $OutputDir "Retirement-Absolute-$(Get-Date -Format 'yyyyMMdd-HHmmss').csv"
 
 Write-Host "Retire-Absolute | $(@($rows).Count) devices | PreviewOnly=$PreviewOnly | Log: $script:logPath"

@@ -6,7 +6,7 @@ When a device is retired, it needs to be cleaned up in four separate systems:
 Active Directory, SCCM, Absolute, and Cisco Secure Endpoint. Each one has its
 own console, its own auth model, and its own manual process.
 
-This orchestrator takes a CSV of hostnames and serial numbers as input, and retires the device in all four systems. There is also an audit report that gets produced.
+This orchestrator takes a list of hostnames and serial numbers as input, and retires the device in all four systems. There is also an audit report that gets produced, plus one running ledger across every run.
 
 All scripts default to preview mode as a safety guard. The code won't execute unless you explicitly
 use `-PreviewOnly $false`.
@@ -70,13 +70,17 @@ Set-Secret -Name CiscoAmpClientId    -Secret 'your-client-id'
 Set-Secret -Name CiscoAmpApiKey      -Secret 'your-api-key'
 ```
 
-3. Prepare a CSV with `Hostname` and/or `SerialNumber` columns:
+3. Drop your device list in `DangerZone-DevicesToBeRetired\`. Either shape works:
 
 ```
 Hostname,SerialNumber
 WORKSTATION-01,ABC123
 WORKSTATION-02,DEF456
 ```
+
+or a plain `.txt` with names anywhere in it. Tabs, spaces, a sentence at the top, doesn't matter.
+Anything shaped like `XX-something` is read as a hostname, the rest is ignored.
+Every file in the folder gets picked up and duplicates are collapsed.
 
 ---
 
@@ -101,22 +105,40 @@ To test a subset:
 Looks up every device in each system and logs what would happen. Read only, so no changes will be made.
 
 ```powershell
-.\Invoke-DeviceRetirement.ps1 -CsvPath .\ToBeRetired\batch.csv
+.\Invoke-DeviceRetirement.ps1
 ```
+
+Reads everything in `DangerZone-DevicesToBeRetired\`. Point it at one file instead with `-CsvPath`.
 
 ### Action mode
 
 ```powershell
-.\Invoke-DeviceRetirement.ps1 -CsvPath .\ToBeRetired\batch.csv -PreviewOnly $false
+.\Invoke-DeviceRetirement.ps1 -PreviewOnly $false -ConfirmCiscoDelete
 ```
+
+It asks you to type the device count before it touches anything. `-ConfirmCiscoDelete` is required
+if Cisco is in the run, because that delete cannot be undone. Batches over 500 are refused unless
+you raise `-MaxBatch` on purpose.
 
 ### Target specific systems
 
 ```powershell
-.\Invoke-DeviceRetirement.ps1 -CsvPath .\ToBeRetired\batch.csv -Systems SCCM,AD
+.\Invoke-DeviceRetirement.ps1 -Systems SCCM,AD
 ```
 
 Valid values: `Absolute`, `CiscoAmp`, `SCCM`, `AD`
+
+---
+
+## Big batches
+
+Things I learned sizing this for hundreds of machines at a time.
+
+- Run it on hardware that is already wiped or gone. Cisco and SCCM only delete the console record. A live agent re-registers on its next check-in.
+- Absolute only unenrolls devices whose agent status is Active. Anything already dark logs as Found and stays put. It also has a daily threshold per action type, so check the Unenroll threshold in the console before a big day or the API starts returning 429.
+- Waves of 100 to 150 beat one 500 shot. Preview logs are the only gate, so read the Found and NotFound counts against what you expect before flipping to action.
+- Unattended runs: pass `-Force` to skip the typed confirmation, and set the vault to no password with `Set-SecretStoreConfiguration -Authentication None -Interaction None` or it sits waiting for a prompt.
+- `out\ledger.csv` is the running record across every run, with a `RunId` column. Send that, not the folders.
 
 ---
 
@@ -148,7 +170,9 @@ Each run creates a timestamped directory under `OUTPUT_DIR`:
 
 ```
 out\
+  ledger.csv
   20260410-143022\
+    targets.csv
     Retirement-Absolute-20260410-143022.csv
     Retirement-CiscoAmp-20260410-143023.csv
     Retirement-SCCM-20260410-143024.csv
@@ -156,7 +180,8 @@ out\
 ```
 
 Each log CSV contains: `Timestamp`, `Hostname`, `SerialNumber`, `System`,
-`Action`, `Status`, `Detail`.
+`Action`, `Status`, `Detail`. `targets.csv` is the exact deduped list that run used.
+`ledger.csv` is every log from every run appended together with a `RunId` column.
 
 ---
 

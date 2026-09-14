@@ -44,6 +44,59 @@ function Test-Whitelist {
 }
 
 
+function Read-DeviceList {
+    param([string[]]$Paths)
+
+    # takes any mix of headed csv files and raw name dumps, returns Hostname/SerialNumber rows
+    # raw dumps: every token that looks like a device name (XX-something) counts, everything else is ignored
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $seen = @{}
+
+    foreach ($p in $Paths) {
+        $src   = Split-Path $p -Leaf
+        $first = Get-Content -LiteralPath $p -TotalCount 1
+
+        if ($first -match '(?i)^\s*"?(hostname|serialnumber)"?\s*(,|$)') {
+            foreach ($r in Import-Csv -LiteralPath $p) {
+                $hn = if ($r.PSObject.Properties['Hostname'])     { "$($r.Hostname)".Trim() }     else { '' }
+                $sn = if ($r.PSObject.Properties['SerialNumber']) { "$($r.SerialNumber)".Trim() } else { '' }
+                if (-not $hn -and -not $sn) { continue }
+                $key = "$hn|$sn".ToUpper()
+                if ($seen[$key]) { continue }
+                $seen[$key] = $true
+                $rows.Add([pscustomobject]@{ Hostname = $hn; SerialNumber = $sn; Source = $src })
+            }
+        } else {
+            foreach ($line in Get-Content -LiteralPath $p) {
+                if ($line -match '^\s*#') { continue }
+                foreach ($tok in ($line -split '[\s,;]+')) {
+                    $t = $tok.Trim().Trim('"', "'")
+                    if ($t -notmatch '^[A-Za-z]{2,4}-[A-Za-z0-9-]{3,}$') { continue }
+                    $key = "$t|".ToUpper()
+                    if ($seen[$key]) { continue }
+                    $seen[$key] = $true
+                    $rows.Add([pscustomobject]@{ Hostname = $t; SerialNumber = ''; Source = $src })
+                }
+            }
+        }
+    }
+    return @($rows)
+}
+
+
+function Add-RetirementLedger {
+    param([string]$RunDir, [string]$LedgerPath)
+
+    # one ledger across every run so you never have to stitch out\ folders together
+    $runId = Split-Path $RunDir -Leaf
+    foreach ($log in Get-ChildItem -LiteralPath $RunDir -Filter 'Retirement-*.csv' -File) {
+        Import-Csv -LiteralPath $log.FullName |
+            Select-Object @{ n = 'RunId'; e = { $runId } }, * |
+            Export-Csv -LiteralPath $LedgerPath -Append -NoTypeInformation -Encoding UTF8
+    }
+}
+
+
 function Write-RetirementLog {
     param(
         [string]$Hostname,

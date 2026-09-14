@@ -1,5 +1,7 @@
 out/
 ToBeRetired/
+DangerZone-DevicesToBeRetired/*
+!DangerZone-DevicesToBeRetired/README.md
 .env
 .secrets.env
 *.cer
