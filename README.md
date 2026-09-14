@@ -6,7 +6,7 @@ When a device is retired, it needs to be cleaned up in four separate systems:
 Active Directory, SCCM, Absolute, and Cisco Secure Endpoint. Each one has its
 own console, its own auth model, and its own manual process.
 
-This orchestrator takes a list of hostnames and serial numbers as input, and retires the device in all four systems. There is also an audit report that gets produced, plus one running ledger across every run.
+This orchestrator takes a list of hostnames and serial numbers as input, and retires the device in all four systems. There is also an audit report, and a ledger that tracks every run.
 
 All scripts default to preview mode as a safety guard. The code won't execute unless you explicitly
 use `-PreviewOnly $false`.
@@ -78,9 +78,9 @@ WORKSTATION-01,ABC123
 WORKSTATION-02,DEF456
 ```
 
-or a plain `.txt` with names anywhere in it. Tabs, spaces, a sentence at the top, doesn't matter.
-Anything shaped like `XX-something` is read as a hostname, the rest is ignored.
-Every file in the folder gets picked up and duplicates are collapsed.
+or a plain `.txt` with names anywhere in it. Tabs, spaces, a header line, doesn't matter.
+Anything shaped like `XX-something` counts as a hostname, the rest gets ignored.
+Drop as many files as you want in there, duplicates get collapsed.
 
 ---
 
@@ -117,7 +117,7 @@ Reads everything in `DangerZone-DevicesToBeRetired\`. Point it at one file inste
 ```
 
 It asks you to type the device count before it touches anything. `-ConfirmCiscoDelete` is required
-if Cisco is in the run, because that delete cannot be undone. Batches over 500 are refused unless
+if Cisco is in the run, because that delete can't be undone. Batches over 500 are refused unless
 you raise `-MaxBatch` on purpose.
 
 ### Target specific systems
@@ -130,15 +130,13 @@ Valid values: `Absolute`, `CiscoAmp`, `SCCM`, `AD`
 
 ---
 
-## Big batches
+## At scale
 
-Things I learned sizing this for hundreds of machines at a time.
-
-- Run it on hardware that is already wiped or gone. Cisco and SCCM only delete the console record. A live agent re-registers on its next check-in.
+- Run it on hardware that's already wiped or gone. Cisco and SCCM only delete the console record. A live agent re-registers on its next check-in.
 - Absolute only unenrolls devices whose agent status is Active. Anything already dark logs as Found and stays put. It also has a daily threshold per action type, so check the Unenroll threshold in the console before a big day or the API starts returning 429.
-- Waves of 100 to 150 beat one 500 shot. Preview logs are the only gate, so read the Found and NotFound counts against what you expect before flipping to action.
+- Do it in waves of 100 to 150, not one 500-machine batch. Preview logs are the only gate, so read the Found and NotFound counts against what you expect before flipping to action.
 - Unattended runs: pass `-Force` to skip the typed confirmation, and set the vault to no password with `Set-SecretStoreConfiguration -Authentication None -Interaction None` or it sits waiting for a prompt.
-- `out\ledger.csv` is the running record across every run, with a `RunId` column. Send that, not the folders.
+- `out\ledger.csv` is the running record across every run, with a `RunId` column. That one file is the report.
 
 ---
 
@@ -181,7 +179,7 @@ out\
 
 Each log CSV contains: `Timestamp`, `Hostname`, `SerialNumber`, `System`,
 `Action`, `Status`, `Detail`. `targets.csv` is the exact deduped list that run used.
-`ledger.csv` is every log from every run appended together with a `RunId` column.
+`ledger.csv` is the same logs appended across every run.
 
 ---
 
